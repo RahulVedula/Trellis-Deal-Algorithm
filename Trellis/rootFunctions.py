@@ -265,7 +265,7 @@ def getSimpleInfo(profitAfter,profitBefore,unitBeforeDeal,start_date,end_date,un
     changeInUnits7Days_str = f"{changeInUnits7Days:.2f}%"
     changeInUnits30Days_str = f"{changeInUnits30Days:.2f}%"
 
-    # Create the DataFrame
+  
     data = [
         ["Profits", changeInProfit7Days_str, changeInProfit30Days_str],
         ["Units", changeInUnits7Days_str, changeInUnits30Days_str]
@@ -292,6 +292,8 @@ def getSimpleInfo2(salesBefore,unitsBefore,salesDuring,unitsDuring,cost_per_unit
     df = pd.DataFrame(data, columns=[' ', 'During Deal Effects', 'Long Term Deal Effects(30 days)'])
     return df
 
+def round_nested_list_to_two_decimal_places(nested_list):
+    return [[round(element, 2) if isinstance(element, (float, int)) else element for element in row] for row in nested_list]
 
 def get7DayProfitInfo(beforeDeal,unitBeforeDeal,duringDeal,unitDuringDeal,afterDeal,unitAfterDeal,cost_per_unit,start_date,end_date):
     before7DaysSales = beforeDeal.truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=7)), after = (datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=1)))
@@ -304,7 +306,8 @@ def get7DayProfitInfo(beforeDeal,unitBeforeDeal,duringDeal,unitDuringDeal,afterD
         ["Revenue",before7DaysSales.sum()/7,duringDeal.sum()/duringDeal.count(),after7DaysSales.sum()/7],
         ["Cost",(cost_per_unit*before7DaysUnits.sum())/7,(cost_per_unit * unitDuringDeal.sum())/unitDuringDeal.count(),(cost_per_unit*after7DaysUnits.sum())/7],
         ["Profit",(before7DaysSales.sum()-cost_per_unit*before7DaysUnits.sum())/7,(duringDeal.sum() - cost_per_unit * unitDuringDeal.sum())/duringDeal.count(), (after7DaysSales.sum() - cost_per_unit*after7DaysUnits.sum())/7]]
-    sales7Days_df = pd.DataFrame(data, columns=['  ','7 Days Before', 'During Deal','7 Days After'])
+    rounded_data = round_nested_list_to_two_decimal_places(data)
+    sales7Days_df = pd.DataFrame(rounded_data, columns=['  ','7 Days Before', 'During Deal','7 Days After'])
     return sales7Days_df
 
 def moreInformation (profitBefore,profitAfter,unitsBeforeDeal,salesBeforeDeal,salesDuringDeal,unitsDuringDeal,afterDeal,unitAfterDeal):
@@ -314,9 +317,9 @@ def moreInformation (profitBefore,profitAfter,unitsBeforeDeal,salesBeforeDeal,sa
      ["Time Untill Net Losses Are Recovered", "Never" if recovery_date == NULL_CONSTANT else str(recovery_date)+" days"], 
      ["Change in Growth Rate", "Never" if changeInGrowthRate(profitBefore, profitAfter) == NULL_CONSTANT else str(round(changeInGrowthRate(profitBefore, profitAfter)*100, 2))+'%'], 
      ["Last Day of Growth From Deal", "Never" if growthTime(profitBefore, profitAfter) == NULL_CONSTANT else str(growthTime(profitBefore, profitAfter)) + " days"]]
-    moreInfoDf = pd.DataFrame(data, columns=['Statistic','Product'])
+    moreInfoDf = pd.DataFrame(data, columns=['Statistics','Product'])
     return moreInfoDf
-
+ 
 
 def case_1(beforeDeal,afterDeal,duringDeal,unitDuringDeal,unitBeforeDeal,unitAfterDeal,cost_per_unit,start_date,end_date,profit_date,profitAfter,recovery_date,profitBefore):
     before7DaysSales = beforeDeal.truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=7)), after = (datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=1)))

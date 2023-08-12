@@ -1,16 +1,24 @@
 import pandas as pd 
 from datetime import datetime, timedelta
 import matplotlib.pyplot as mp
-import matplotlib as mpl
 import numpy as np
 from scipy.stats import linregress
-from matplotlib.widgets import Button
 import termtables as tt
 from scipy.stats import linregress
 from scipy import stats
 import math
 import hypothesisTesting
- 
+
+""" 
+This code will parse through all deals ran on child asins for the past year, and determine how many pass a metric (Uplift, profit per day higher than 50$...)
+
+Input Format:
+ASIN
+2022-09-26 (Deal Date)
+2022-10-03 (Deal End Date)
+30 (Cost Per Unit)
+"""
+
 TIME_LIMIT = 120
 NULL_CONSTANT = -1
 
@@ -45,7 +53,7 @@ def averageDates(asin,start_date,end_date):
     beforeDeal = df.truncate(after=start_date)
     beforeDeal.drop(beforeDeal.tail(1).index,inplace=True) 
     duringDeal = df.truncate(before=start_date,after = end_date)
-    afterDeal = df.truncate(before = end_date)
+    afterDeal = df.truncate(before = end_date, after = datetime.strptime(end_date, '%Y-%m-%d')+timedelta(days=14))
     afterDeal.drop(afterDeal.head(1).index,inplace=True) 
     return [meanAverage(beforeDeal), meanAverage(duringDeal), meanAverage(afterDeal)]
 
@@ -159,13 +167,15 @@ def changeInGrowthRate(beforeDealProfit, afterDealProfit):
     normalizedDeal = normalizeAfterDeal(beforeDealProfit,afterDealProfit)
     if normalizedDeal.empty:
         return NULL_CONSTANT
-    afterDealProfit.truncate(after=(afterDealProfit.index.min()+timedelta(days=14)))
-    if linAverage(beforeDealProfit['profit']).slope < 0:
-        return -1*((linAverage(afterDealProfit['profit']).slope - linAverage(beforeDealProfit['profit']).slope) / linAverage(beforeDealProfit['profit']).slope)
+    afterDealProfit= afterDealProfit.truncate(after=(afterDealProfit.index.min()+timedelta(days=14)))
+    if (linAverage(beforeDealProfit['profit']).slope > 0 and linAverage(beforeDealProfit['profit']).slope < 1)  or (linAverage(beforeDealProfit['profit']).slope < 0 and linAverage(beforeDealProfit['profit']).slope > -1):
+        return (linAverage(afterDealProfit['profit']).slope)
     elif(linAverage(beforeDealProfit['profit']).slope == 0):
         return linAverage(afterDealProfit['profit']).slope
+    elif linAverage(beforeDealProfit['profit']).slope < 0:
+        return -1*((linAverage(afterDealProfit['profit']).slope - linAverage(beforeDealProfit['profit']).slope) / linAverage(beforeDealProfit['profit']).slope)
     return (linAverage(afterDealProfit['profit']).slope - linAverage(beforeDealProfit['profit']).slope) / linAverage(beforeDealProfit['profit']).slope
- 
+
 def growthTime(beforeDealProfit, afterDealProfit):
     normalizedDeal = normalizeAfterDeal(beforeDealProfit,afterDealProfit)
     if normalizedDeal.empty:
@@ -249,21 +259,16 @@ def profitNumbers(profitAfter,end_date):
 def main():
     #assigning variables
     df = pd.read_csv("LUXE_DEALS.csv")
-    df_restraints = df.copy(deep=True)
-    start_date = input()
-    start_date = datetime.strptime(start_date, '%Y-%m-%d')
-    end_date = start_date + timedelta(days=30)
-    df_restraints['start_datetime'] = pd.to_datetime(df_restraints['start_datetime']).dt.tz_localize(None)
-    truncated_df = df_restraints[(df_restraints["start_datetime"] >= start_date) & (df_restraints["start_datetime"] <= end_date)]
-    columns = ['Asin', 'Deal Type', 'Profitable (Y/N)', 'Deal Discount Costs', 'Units Before Deal', 'Units During Deal', 'Units After Deal', 'Short Term Profitability','Long Term Profitability']
-    dealInfo = pd.DataFrame(columns=columns)
-    for i in range(len(truncated_df)):
+    list_top_slopes = []
+    count=0
+    for i in range(len(df)):
         asinValue = df.iloc[i, df.columns.get_loc('asin')]
         start_date = df.iloc[i, df.columns.get_loc('start_datetime')][:10]
         end_date = df.iloc[i, df.columns.get_loc('end_datetime')][:10]  
         discount = 0
         grouped_df = filterByAsin(asinValue)[1]
         unit_df = filterByAsin(asinValue)[0]
+
 
         #Unit Dataframes Seperation
         unitBeforeDeal = unit_df.truncate(after=start_date,before=(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=30)))
@@ -290,35 +295,15 @@ def main():
         #Calculate profits
         profitBefore= profit_dataframe(beforeDeal,unitBeforeDeal, cost_per_unit)
         profitDuring= profit_dataframe(duringDeal,unitDuringDeal, cost_per_unit)
-        profitAfter= profit_dataframe(afterDeal,unitAfterDeal, cost_per_unit)
+        profitAfter= profit_dataframe(afterDeal,unitAfterDeal, cost_per_unit) 
+    
+        profit30DaysAfter = profitAfter['profit'].truncate(after = profitAfter.index.min()+timedelta(days=30))
+        if (profitBefore['profit'].sum()<profit30DaysAfter.sum()) and (unitBeforeDeal.sum() > 5):
+            count+=1
 
-        new_row = [asinValue, df.iloc[i, df.columns.get_loc('promotion_type')], 'Y' if netLoss() > 1 else 'N', 
-                   discountLoss(unitBeforeDeal,beforeDeal,duringDeal,unitDuringDeal,afterDeal,unitAfterDeal), unitsAtInterval(unitBeforeDeal,start_date,end_date,unitAfterDeal)[0], unitDuringDeal.sum(), 
-                   unitsAtInterval(unitBeforeDeal,start_date,end_date,unitAfterDeal)[1], profitNumbers(profitAfter['profit'],end_date)[0],profitNumbers(profitAfter['profit'],end_date)[1]]
-        dealInfo.loc[i] = new_row
-    print(dealInfo.to_string(index=False))
-    csv_file = 'juneData.csv'
-    dealInfo.to_csv(csv_file, index=False, mode='w')
+    print('profit deals:', count)
+
 
 if __name__ == "__main__":
     main()
-
-""" 
-B07YRSH7D2
-2022-09-26
-2022-10-03
-30
-0
-"""
-#B0921FSF2F
-""""
-significant
-B09VCVNXZN
-2022-08-22
-2023-08-29
-25
-15
-"""
-
-# Change Net Loss, find deals.
 

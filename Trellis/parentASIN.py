@@ -2,6 +2,9 @@ import rootFunctions
 import pandas as pd
 from datetime import datetime, timedelta
 
+#This code seperates combines grouped deals (within a 14 day period), 
+#then analyzes each of these grouped deals and by certain metrics, determines certain statistics related to each deal
+#This code currently measures the uplift and splits it into three buckets of bad, neutral, and good, then further subdivides the positive by how positive they are and the deal type
 
 
 def childAsins():

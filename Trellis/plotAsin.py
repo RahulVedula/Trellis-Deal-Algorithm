@@ -1,7 +1,6 @@
 import pandas as pd 
 from datetime import datetime, timedelta
 import matplotlib.pyplot as mp
-import matplotlib as mpl
 import numpy as np
 from scipy.stats import linregress
 from matplotlib.widgets import Button
@@ -10,9 +9,18 @@ from scipy.stats import linregress
 from scipy import stats
 import math
 import hypothesisTesting
+import rootFunctions
  
 TIME_LIMIT = 120
 NULL_CONSTANT = -1
+TRELLIS_PINK_LIGHT='#FFB6C1'
+TRELLIS_PINK='#D91266'
+TRELLIS_PURPLE='#850066'
+GREY='#D3D3D3' 
+TRELLIS_PURPLE_DARK='#2E0054'
+TRELLIS_CREAM = '#FFFBF8'
+TRELLIS_LILAC= '#CCCCFF'
+TRELLIS_YELLOW= '#FFDF5A'
 
 def filterByAsin(asinValue):
     df = pd.read_csv("LUXE_SALES.csv") 
@@ -64,6 +72,13 @@ def line_function(df):
     funcVals = linAverage(df)
     accumulator = []
     for i in range(df.count()):
+        accumulator.append(funcVals.slope * i + funcVals.intercept)
+    return accumulator
+
+def line_function_extend(df):
+    funcVals = linAverage(df)
+    accumulator = []
+    for i in range(df.count()+16):
         accumulator.append(funcVals.slope * i + funcVals.intercept)
     return accumulator
 
@@ -148,8 +163,12 @@ def changeInGrowthRate(beforeDealProfit, afterDealProfit):
     normalizedDeal = normalizeAfterDeal(beforeDealProfit,afterDealProfit)
     if normalizedDeal.empty:
         return NULL_CONSTANT
-    afterDealProfit.truncate(after=(afterDealProfit.index.min()+timedelta(days=14)))
-    if linAverage(beforeDealProfit['profit']).slope < 0:
+    afterDealProfit= afterDealProfit.truncate(after=(afterDealProfit.index.min()+timedelta(days=14)))
+    if (linAverage(beforeDealProfit['profit']).slope > 0 and linAverage(beforeDealProfit['profit']).slope < 1)  or (linAverage(beforeDealProfit['profit']).slope < 0 and linAverage(beforeDealProfit['profit']).slope > -1):
+        return (linAverage(afterDealProfit['profit']).slope)
+    elif(linAverage(beforeDealProfit['profit']).slope == 0):
+        return linAverage(afterDealProfit['profit']).slope
+    elif linAverage(beforeDealProfit['profit']).slope < 0:
         return -1*((linAverage(afterDealProfit['profit']).slope - linAverage(beforeDealProfit['profit']).slope) / linAverage(beforeDealProfit['profit']).slope)
     return (linAverage(afterDealProfit['profit']).slope - linAverage(beforeDealProfit['profit']).slope) / linAverage(beforeDealProfit['profit']).slope
 
@@ -189,21 +208,27 @@ def growthTime(beforeDealProfit, afterDealProfit):
         if i+15 ==  120 or i+15 == afterDealProfit['profit'].count()-1:
             return NULL_CONSTANT
     
-def graphLabels(recovery_date,afterDeal,profit_date):
+def graphLabels(recovery_date,duringDeal,profit_date, asinValue):
     #Net Loss Recovered
-    if recovery_date != NULL_CONSTANT:
-        mp.axvline(afterDeal.index.min()+timedelta(days=recovery_date),color='purple', linestyle='--')
+    # if recovery_date != NULL_CONSTANT:
+    #     mp.axvline(duringDeal.index.max()+timedelta(days=recovery_date),color='black', linestyle='--')
+    mp.axvline(duringDeal.index.min(),color='black', linestyle='--')
+    mp.axvline(duringDeal.index.max(),color='black', linestyle='--')
     #Profitable Time
-    mp.axvline(profit_date, color='aqua', linestyle='--')
     #Y-axis,x-axis labels
     mp.xlabel('Date')
     mp.ylabel('Sales')
     #Legend
     legend_handles = [
-    mp.Rectangle((0, 0), 1, 1, color='aqua', label='Deal Induced Effects'),
-    mp.Rectangle((0, 0), 1, 1, color='purple', label='Net Losses Recovered')
+    # mp.Rectangle((0, 0), 1, 1, color='black', label='Deal Discount Recovered'),
+    mp.Rectangle((0, 0), 1, 1, color=TRELLIS_PINK, alpha = 0.5, label= "Deal Period"),
+    mp.Rectangle((0, 0), 1, 1, color=TRELLIS_PURPLE_DARK, alpha = 0.5, label= "Regression Lines for Profit"),
+
     ]
-    mp.legend(handles=legend_handles, loc='upper left')
+    legend = mp.legend(handles=legend_handles, loc='upper left')
+    
+    # Set the background color of the legend
+    legend.get_frame().set_facecolor(TRELLIS_CREAM)  # You can change 'lightgray' to any color you prefer
 
 
 
@@ -251,7 +276,6 @@ def main():
     asinValue = input()#B00LCJAW06
     start_date = input() #2023-03-10
     end_date = input() #2023-05-01
-    cost_per_unit = int(input()) #25   
 
     grouped_df = filterByAsin(asinValue)[1]
     unit_df = filterByAsin(asinValue)[0]
@@ -270,12 +294,14 @@ def main():
     duringDeal = grouped_df.truncate(before=start_date,after = end_date)
     afterDeal = grouped_df.truncate(before = end_date)
     afterDeal.drop(afterDeal.head(0).index,inplace=True) 
-    print(beforeDeal.truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=7))))
-    print(afterDeal.truncate(after =(datetime.strptime(end_date, '%Y-%m-%d')+timedelta(days=7))))
-
     #getting mean averages
     list_of_averages = averageDates(asinValue,start_date,end_date)
-    
+    if rootFunctions.find_most_frequent_value(beforeDeal,unitBeforeDeal) == None and rootFunctions.find_most_frequent_value(afterDeal,unitAfterDeal) == None:
+        cost_per_unit = 0
+    elif (rootFunctions.find_most_frequent_value(beforeDeal,unitBeforeDeal) == None):
+        cost_per_unit = (rootFunctions.find_most_frequent_value(afterDeal,unitAfterDeal))/3 
+    else:
+        cost_per_unit = (rootFunctions.find_most_frequent_value(beforeDeal,unitBeforeDeal))/3 
     #Calculate profits
     profitBefore= profit_dataframe(beforeDeal,unitBeforeDeal, cost_per_unit)
     profitDuring= profit_dataframe(duringDeal,unitDuringDeal, cost_per_unit)
@@ -291,7 +317,7 @@ def main():
     header=["Statistic", "Product"],  
     style=tt.styles.ascii_thin_double,
     )
-    print (string)
+    # print (string)
 
     #Graphing
     fig1 = mp.figure(figsize=(12, 8))
@@ -299,40 +325,68 @@ def main():
     fig3 = mp.figure(figsize=(12, 8))
     #Plot graph with linear regression of revenue
     mp.figure(fig1.number) #mp.subplot(3,1,1)
-    grouped_df.truncate(before=beforeDeal.index.min()).plot(x="date_trunch", y=["sales"],grid = True, kind="line")
+    mp.ylim(0, 2000)
+    grouped_df.truncate(before=beforeDeal.index.min(), after=profitAfter.index.min()+timedelta(days=30)).plot(x="date_trunc", y=["sales"], kind="line", color=TRELLIS_PURPLE, alpha=0.5)
+    mp.fill_between(grouped_df.truncate(before=beforeDeal.index.min(), after=duringDeal.index.min()).index.values, grouped_df.truncate(before=beforeDeal.index.min(), after=duringDeal.index.min()), color=TRELLIS_PURPLE, alpha=0.2)
+    mp.fill_between(grouped_df.truncate(before=duringDeal.index.min(), after=duringDeal.index.max()).index.values, grouped_df.truncate(before=duringDeal.index.min(), after=duringDeal.index.max()), color=TRELLIS_PURPLE_DARK, alpha=0.3)
+    mp.fill_between(grouped_df.truncate(before=duringDeal.index.max(), after=profitAfter.index.min()+timedelta(days=30)).index.values, grouped_df.truncate(before=duringDeal.index.max(), after=profitAfter.index.min()+timedelta(days=30)), color=TRELLIS_PURPLE, alpha=0.2)
     beforeLine = line_function(beforeDeal)
     duringLine = line_function(duringDeal)
-    afterLine = line_function(afterDeal)
-    mp.plot(afterDeal.index,afterLine, color='orange')
-    mp.plot(beforeDeal.index,beforeLine,color='orange')
-    mp.plot(duringDeal.index,duringLine, color='orange')
-    mp.axvspan(duringDeal.index.min(),duringDeal.index.max(), facecolor='0.2', alpha=0.5)
-    graphLabels(recovery_date,afterDeal,profit_date)
+    afterLine = line_function_extend(afterDeal.truncate(after=(afterDeal.index.min()+timedelta(days=14))))
+    mp.plot(afterDeal.truncate(after=(afterDeal.index.min()+timedelta(days=14))).index,afterLine[:15], color=TRELLIS_PINK)
+    mp.plot(afterDeal.truncate(before=(afterDeal.index.min()+timedelta(days=14)),after=(afterDeal.index.min()+timedelta(days=30))).index,afterLine[14:], color=TRELLIS_PINK,linestyle='--')
+    mp.plot(beforeDeal.index,beforeLine,color=TRELLIS_PINK)
+    mp.plot(duringDeal.index,duringLine, color=TRELLIS_PINK)
+    graphLabels(recovery_date,duringDeal,profit_date, asinValue)
     mp.title("Sales per Day")
 
     #Plot graph with averages 
-    mp.figure(fig2.number)
-    grouped_df.truncate(before=beforeDeal.index.min()).plot(x="date_trunch", y=["sales"],grid = True, kind="line")
-    mp.hlines(y=list_of_averages[0], xmin=beforeDeal.index.min(), xmax=beforeDeal.index.max(), colors='#301934', linestyles='-', lw=2, label='Average 1')
-    mp.hlines(y=list_of_averages[1], xmin=duringDeal.index.min(), xmax=duringDeal.index.max(), colors='#301934', linestyles='-', lw=2, label='Average 2')
-    mp.hlines(y=list_of_averages[2], xmin=afterDeal.index.min(), xmax=afterDeal.index.max(), colors='#301934', linestyles='-', lw=2, label='Average 3')    
-    mp.axvspan(duringDeal.index.min(),duringDeal.index.max(), facecolor='0.2', alpha=0.5)
-    graphLabels(recovery_date,afterDeal,profit_date)
-    mp.title("Average Sales per Day")
+    # mp.figure(fig2.number)
+    # grouped_df.truncate(before=beforeDeal.index.min(), after=profitAfter.index.min()+timedelta(days=30)).plot(x="date_trunch", y=["sales"],grid = True, kind="line")
+    # mp.hlines(y=list_of_averages[0], xmin=beforeDeal.index.min(), xmax=beforeDeal.index.max(), colors='#301934', linestyles='-', lw=2, label='Average 1')
+    # mp.hlines(y=list_of_averages[1], xmin=duringDeal.index.min(), xmax=duringDeal.index.max(), colors='#301934', linestyles='-', lw=2, label='Average 2')
+    # mp.hlines(y=list_of_averages[2], xmin=afterDeal.index.min(), xmax=afterDeal.index.max(), colors='#301934', linestyles='-', lw=2, label='Average 3')    
+    # mp.axvspan(duringDeal.index.min(),duringDeal.index.max(), facecolor='0.2', alpha=0.5)
+    # graphLabels(recovery_date,afterDeal,profit_date, asinValue)
+    # mp.title("Average Sales per Day")
 
     #Plot trend lines for profit
-    mp.figure(fig3.number) 
-    grouped_df.truncate(before=beforeDeal.index.min()).plot(x="date_trunc", y=["sales"],grid = True, kind="line")
+
+    mp.ylim(0, 2000)
+    grouped_df.truncate(before=beforeDeal.index.min(), after=profitAfter.index.min()+timedelta(days=30)).plot(x="date_trunc", y=["Profit"], kind="line", color=TRELLIS_PURPLE, alpha = 0.5)
     profitBeforeLine = line_function(profitBefore['profit'])
     profitDuringLine = line_function(profitDuring['profit'])
-    profitAfterLine = line_function(profitAfter['profit'])
-    mp.plot(beforeDeal.index,profitBeforeLine, color='green')
-    mp.plot(duringDeal.index,profitDuringLine, color='green')
-    mp.plot(afterDeal.index,profitAfterLine, color='green')
-    mp.axvspan(duringDeal.index.min(),duringDeal.index.max(), facecolor='0.2', alpha=0.5)
-    graphLabels(recovery_date,afterDeal,profit_date)
+    profitAfterLine = line_function_extend(profitAfter['profit'].truncate(after=(profitAfter.index.min()+timedelta(days=14))))
+    mp.fill_between(grouped_df.truncate(before=beforeDeal.index.min(), after=duringDeal.index.min()).index.values, grouped_df.truncate(before=beforeDeal.index.min(), after=duringDeal.index.min()), color=TRELLIS_PURPLE, alpha=0.2)
+    mp.fill_between(grouped_df.truncate(before=duringDeal.index.min(), after=duringDeal.index.max()).index.values, grouped_df.truncate(before=duringDeal.index.min(), after=duringDeal.index.max()), color=TRELLIS_PINK, alpha=0.4)
+    mp.fill_between(grouped_df.truncate(before=duringDeal.index.max(), after=profitAfter.index.min()+timedelta(days=30)).index.values, grouped_df.truncate(before=duringDeal.index.max(), after=profitAfter.index.min()+timedelta(days=30)), color=TRELLIS_PURPLE, alpha=0.2)
+    mp.plot(beforeDeal.index,profitBeforeLine, color=TRELLIS_PURPLE_DARK)
+    mp.plot(duringDeal.index,profitDuringLine, color=TRELLIS_PURPLE_DARK)
+    mp.plot(profitAfter.truncate(after=(profitAfter.index.min()+timedelta(days=14))).index,profitAfterLine[:15], color=TRELLIS_PURPLE_DARK)
+    mp.plot(profitAfter.truncate(before=(profitAfter.index.min()+timedelta(days=14)), after = (profitAfter.index.min()+timedelta(days=30))).index,profitAfterLine[14:], color=TRELLIS_PURPLE_DARK,linestyle='--')
+    graphLabels(recovery_date,duringDeal,profit_date, asinValue)    
+    mp.gca().set_facecolor(TRELLIS_CREAM)
+    # mp.axvspan(duringDeal.index.min(),duringDeal.index.max(), facecolor=TRELLIS_YELLOW, alpha=0.3)
     mp.title("Profit per Day")
-    
+    columns = ['Asin', 'Incremental Profit/Loss','Profit Before(30 Days)', 'Profit During', 'Profit After(30 Days)','Units Before(30 Days)', 'Units During', 'Units After(30 Days)']
+    dealInfo = pd.DataFrame(columns=columns)
+    if (rootFunctions.find_most_frequent_value(beforeDeal,unitBeforeDeal) >= rootFunctions.find_most_frequent_value(afterDeal,unitAfterDeal) and (rootFunctions.unitsAtInterval(unitBeforeDeal,start_date,end_date,unitAfterDeal)[0])/30 < (rootFunctions.unitsAtInterval(unitBeforeDeal,start_date,end_date,unitAfterDeal)[1])/30):
+            Uplift = 'Y'
+    else:
+            Uplift = 'N'
+    new_row = [asinValue, rootFunctions.netLoss(unitBeforeDeal,beforeDeal,unitDuringDeal,duringDeal,cost_per_unit),
+                     rootFunctions.profitNumbers(profitBefore['profit'],start_date,profitAfter['profit'],end_date,profitDuring['profit'])[0]/30, 
+                   rootFunctions.profitNumbers(profitBefore['profit'],start_date,profitAfter['profit'],end_date,profitDuring['profit'])[1]/profitDuring['profit'].count(),rootFunctions.profitNumbers(profitBefore['profit'],start_date,profitAfter['profit'],end_date,profitDuring['profit'])[2]/30,
+                   (rootFunctions.unitsAtInterval(unitBeforeDeal,start_date,end_date,unitAfterDeal)[0])/30, unitDuringDeal.sum()/unitDuringDeal.count(), 
+                   (rootFunctions.unitsAtInterval(unitBeforeDeal,start_date,end_date,unitAfterDeal)[1])/30]
+        #rootFunctions.profitNumbers(profitAfter['profit'],end_date)[0],rootFunctions.profitNumbers(profitAfter['profit'],end_date)[1]
+    new_row[-7:] = [round(element, 2) for element in new_row[-7:]]
+    dealInfo.loc[0] = new_row
+    print(dealInfo.to_string(index=False))
+    df1 = rootFunctions.getSimpleInfo2(beforeDeal,unitBeforeDeal,duringDeal,unitDuringDeal,cost_per_unit,start_date,end_date,afterDeal,unitAfterDeal)
+    df2 = rootFunctions.get7DayProfitInfo(beforeDeal,unitBeforeDeal,duringDeal,unitDuringDeal,afterDeal,unitAfterDeal,cost_per_unit,start_date,end_date)
+    df3 = rootFunctions.moreInformation(profitBefore,profitAfter,unitBeforeDeal,beforeDeal,duringDeal,unitDuringDeal,afterDeal,unitAfterDeal)
+    print('\n---------------------------------------------------\n',df1.to_string(index=False), '\n----------------------------------------------------\n',df2.to_string(index=False),'\n---------------------------------------------------\n', df3.to_string(index=False))
     mp.show()
 
 if __name__ == "__main__":
@@ -344,11 +398,23 @@ B0921FSF2F
 2022-09-26
 17
 0
+with higher intercept 
+
+yes: [8.156722689075629, 'B0921TP88K', '2023-01-16', '2023-01-23']
+maybe: [3.268986662454383, 'B087NWM539', '2022-08-08', '2022-08-15'], [3.076787127563983, 'B0B1SD12R6', '2023-02-06', '2023-02-13']
+
+
+B0921TP88K
+2023-01-16
+2023-01-23
+
+
+[[1.9523809523809519, 'B0B1S7NN9G', '2022-08-29', '2022-09-05'], [1.952380952380952, 'B09VYGC6RL', '2022-08-01', '2022-08-08'], [2.207875457875458, 'B09VCSSQY1', '2022-08-29', '2022-09-05'], [2.3785714285714286, 'B088T5LXP5', '2023-01-16', '2023-01-23'], [2.615324675324675, 'B08143GCL2', '2023-02-13', '2023-02-20'], [3.076787127563983, 'B0B1SD12R6', '2023-02-06', '2023-02-13'], [3.268986662454383, 'B087NWM539', '2022-08-08', '2022-08-15'], [8.156722689075629, 'B0921TP88K', '2023-01-16', '2023-01-23'], [10.103571428571426, 'B0B1SFDGY7', '2023-01-09', '2023-01-16'], [27.04060902373137, 'B01IRCAUXO', '2022-10-10', '2022-10-11']]
 """
 
 """
 B0921FSF2F
-
+[[16.413095238095234, 'B08KSB18PR', '2023-02-13', '2023-02-20'], [23.142857142857142, 'B09VCVNXZN', '2022-07-18', '2022-07-25'], [23.81428571428571, 'B087NWJX6D', '2022-07-17', '2022-07-18'], [24.77142857142857, 'B081437ZDY', '2022-07-17', '2022-07-18'], [25.933333333333334, 'B08143M8QW', '2022-07-17', '2022-07-18'], [26.13095238095238, 'B08142X9BJ', '2022-07-17', '2022-07-18'], [27.04060902373137, 'B01IRCAUXO', '2022-10-10', '2022-10-11'], [27.049999999999997, 'B08143GCL2', '2022-07-17', '2022-07-18'], [27.935714285714287, 'B087NWNDHC', '2022-07-17', '2022-07-18'], [51.16428571428571, 'B09VCT6WGM', '2023-02-06', '2023-02-13']]
 """
 
 """"
@@ -362,4 +428,7 @@ B09VCVNXZN
 
 
 # Change Net Loss, find deals.
+#[[4.647058823529413, 'B08KSL5V96', '2022-11-21', '2022-11-28'], [4.670337922403003, 'B087NWNKLW', '2022-09-12', '2022-09-19'], [5.448949935992805, 'B0B5HM9F13', '2023-02-13', '2023-02-20'], [5.971428571428571, 'B08MFW2PF8', '2022-08-01', '2022-08-08'], [8.156722689075629, 'B0921TP88K', '2023-01-16', '2023-01-23'], [9.714285714285715, 'B075SKYCQ6', '2022-09-13', '2022-09-14'], [10.103571428571426, 'B0B1SFDGY7', '2023-01-09', '2023-01-16'], [15.857142857142856, 'B08KS957Z7', '2022-09-12', '2022-09-19'], [27.04060902373137, 'B01IRCAUXO', '2022-10-10', '2022-10-11'], [51.16428571428571, 'B09VCT6WGM', '2023-02-06', '2023-02-13']]
+#[[7.065878111262216, 'B01IRCAUXO', '2023-04-17', '2023-04-24'], [7.261904761904761, 'B00RH6BC3O', '2022-09-12', '2022-09-19'], [8.156722689075629, 'B0921TP88K', '2023-01-16', '2023-01-23'], [8.834709240424383, 'B08MFWFMNH', '2022-09-19', '2022-09-26'], [9.642857142857142, 'B08VJN6NHM', '2022-08-29', '2022-09-05'], [9.714285714285715, 'B075SKYCQ6', '2022-09-13', '2022-09-14'], [10.103571428571426, 'B0B1SFDGY7', '2023-01-09', '2023-01-16'], [15.857142857142856, 'B08KS957Z7', '2022-09-12', '2022-09-19'], [27.04060902373137, 'B01IRCAUXO', '2022-10-10', '2022-10-11'], [51.16428571428571, 'B09VCT6WGM', '2023-02-06', '2023-02-13']]
 
+#B01IRCAUXO, 

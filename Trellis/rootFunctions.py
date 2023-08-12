@@ -1,19 +1,14 @@
-import gspread
 import pandas as pd
-import csv
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import matplotlib.pyplot as mp
 import matplotlib as mpl
 import numpy as np
 from scipy.stats import linregress
-from matplotlib.widgets import Button
 import termtables as tt
 from scipy.stats import linregress
 from scipy import stats
 import math
 import hypothesisTesting
-from tabulate import tabulate
 
 
 TIME_LIMIT = 120
@@ -71,6 +66,13 @@ def line_function(df):
         accumulator.append(funcVals.slope * i + funcVals.intercept)
     return accumulator
 
+def line_function_extend(df):
+    funcVals = linAverage(df)
+    accumulator = []
+    for i in range(df.count()+16):
+        accumulator.append(funcVals.slope * i + funcVals.intercept)
+    return accumulator
+
 
 def profit_dataframe(revenue,cost,cost_per_unit):
     data = {'profit':[]} 
@@ -94,12 +96,21 @@ def normalizeAfterDeal (beforeProfit, afterProfit):
         count+=1
     return normalizedPostDeal
         
+def normalizeAfterDealUnits (beforeProfit, afterProfit):
+    count = 0
+    regressionBefore = linAverage(beforeProfit)
+    normalizedPostDeal = afterProfit.copy()
+    for i in afterProfit.index:
+        normalizedPostDeal.at[i] = normalizedPostDeal.at[i] - (regressionBefore.slope*count+regressionBefore.intercept)
+        count+=1
+    return normalizedPostDeal
+        
+
 
 def calcProfit(revenue, costs, costPerUnit):
     return (revenue.sum() - (costs.sum()*costPerUnit))/revenue.count()
 
 def find_most_frequent_value(sales_df, units_df):
-    # Create deep copies of the DataFrames
     sales_copy = sales_df.copy(deep=True)
     units_copy = units_df.copy(deep=True)
     sales_copy = sales_copy.reset_index()
@@ -150,22 +161,35 @@ def profitableTime(afterDealProfit, beforeDealProfit):
     if normalizedDeal.empty:
         return NULL_CONSTANT
     for i in normalizedDeal.index:
+        counter = 0
         sum=0
         for j in normalizedDeal.truncate(before=i, after=i+timedelta(days=14)).index:
             sum += normalizedDeal.at[j,'profit']
         if sum/14 < 0:
-            return i+timedelta(days=14)
+            for k in j,(j+timedelta(days=30)):
+                # if normalizedDeal.truncate(before=k, after=k+timedelta(days=14)).sum<0:
+                #     counter+=1
+                bounceSum = 0
+                for l in  normalizedDeal.truncate(before=k, after=k+timedelta(days=30)).index:
+                    bounceSum += normalizedDeal.at[l,'profit']
+                if bounceSum/30 < 0:
+                    counter += 1
+                if counter>3:
+                    return i+timedelta(days=14)
+            counter=0
     return NULL_CONSTANT
 
 def changeInGrowthRate(beforeDealProfit, afterDealProfit):
     normalizedDeal = normalizeAfterDeal(beforeDealProfit,afterDealProfit)
     if normalizedDeal.empty:
         return NULL_CONSTANT
-    afterDealProfit.truncate(after=(afterDealProfit.index.min()+timedelta(days=14)))
-    if linAverage(beforeDealProfit['profit']).slope < 0:
-        return -1*((linAverage(afterDealProfit['profit']).slope - linAverage(beforeDealProfit['profit']).slope) / linAverage(beforeDealProfit['profit']).slope)
+    afterDealProfit = afterDealProfit.truncate(after=(afterDealProfit.index.min()+timedelta(days=14)))
+    if (linAverage(beforeDealProfit['profit']).slope > 0 and linAverage(beforeDealProfit['profit']).slope < 1)  or (linAverage(beforeDealProfit['profit']).slope < 0 and linAverage(beforeDealProfit['profit']).slope > -1):
+        return (linAverage(afterDealProfit['profit']).slope)
     elif(linAverage(beforeDealProfit['profit']).slope == 0):
         return linAverage(afterDealProfit['profit']).slope
+    elif linAverage(beforeDealProfit['profit']).slope < 0:
+        return -1*((linAverage(afterDealProfit['profit']).slope - linAverage(beforeDealProfit['profit']).slope) / linAverage(beforeDealProfit['profit']).slope)
     return (linAverage(afterDealProfit['profit']).slope - linAverage(beforeDealProfit['profit']).slope) / linAverage(beforeDealProfit['profit']).slope
 
 
@@ -246,32 +270,16 @@ def profitNumbers(profitBefore, start_date, profitAfter, end_date, profitDuring)
     profitBefore30Days = profitBefore.truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=30)), after = (datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=1)))
     return(profitBefore30Days.sum(),profitDuring.sum(),profitAfter30Days.sum())
 
-def getSimpleInfo(profitAfter,profitBefore,unitBeforeDeal,start_date,end_date,unitAfterDeal):
-    profitBefore7Days = profitBefore.truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=7)), after = (datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=1)))
-    profitAfter7Days = profitAfter.truncate(after =(datetime.strptime(end_date, '%Y-%m-%d')+timedelta(days=7)))
-    before7DaysUnits = unitBeforeDeal.truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=7)), after = (datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=1)))
-    after7DaysUnits= unitAfterDeal.truncate(after =(datetime.strptime(end_date, '%Y-%m-%d')+timedelta(days=7)))
-    profitAfter30Days = profitAfter.truncate(after =(datetime.strptime(end_date, '%Y-%m-%d')+timedelta(days=30)))
-    after30DaysUnits = unitAfterDeal.truncate(after =(datetime.strptime(end_date, '%Y-%m-%d')+timedelta(days=30)))
-    profitBefore30Days = profitBefore.truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=30)), after = (datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=1)))
-    before30DaysUnits = unitBeforeDeal.truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=30)), after = (datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=1)))
+    
+def profitNumbers14Days(profitBefore, start_date, profitAfter, end_date, profitDuring):
+    profitAfter14Days = profitAfter.truncate(after =(datetime.strptime(end_date, '%Y-%m-%d')+timedelta(days=14)))
+    profitBefore14Days = profitBefore.truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=14)), after = (datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=1)))
+    return(profitBefore14Days.sum(),profitDuring.sum(),profitAfter14Days.sum())
 
-    changeInProfit7Days = ((profitAfter7Days['profit'].sum() - profitBefore7Days['profit'].sum()) / profitBefore7Days['profit'].sum()) *100
-    changeInProfit30Days = ((profitAfter30Days['profit'].sum() - profitBefore30Days['profit'].sum()) / profitBefore30Days['profit'].sum()) *100
-    changeInUnits7Days = ((after7DaysUnits.sum() - before7DaysUnits.sum()) / before7DaysUnits.sum()) * 100
-    changeInUnits30Days = ((after30DaysUnits.sum() - before30DaysUnits.sum()) / before30DaysUnits.sum()) *100
-    changeInProfit7Days_str = f"{changeInProfit7Days:.2f}%"
-    changeInProfit30Days_str = f"{changeInProfit30Days:.2f}%"
-    changeInUnits7Days_str = f"{changeInUnits7Days:.2f}%"
-    changeInUnits30Days_str = f"{changeInUnits30Days:.2f}%"
-
-  
-    data = [
-        ["Profits", changeInProfit7Days_str, changeInProfit30Days_str],
-        ["Units", changeInUnits7Days_str, changeInUnits30Days_str]
-    ]
-    df = pd.DataFrame(data, columns=[' ', 'Deal Short Term (7 days)', 'Deal long term (30 days)'])
-    return df
+def unitsAt14Days(unitBeforeDeal,start_date,end_date,unitAfterDeal,unitDuringDeal):
+    after14DaysUnits = unitAfterDeal.truncate(after =(datetime.strptime(end_date, '%Y-%m-%d')+timedelta(days=14)))
+    before14DaysUnits = unitBeforeDeal.truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=14)), after = (datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=1)))
+    return [before14DaysUnits.sum(),unitDuringDeal.sum(), after14DaysUnits.sum()]
 
 def getSimpleInfo2(salesBefore,unitsBefore,salesDuring,unitsDuring,cost_per_unit,start_date,end_date,salesAfter,unitsAfter):
     profitBefore = profit_dataframe(salesBefore, unitsBefore,cost_per_unit).truncate(before =(datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=30)), after = (datetime.strptime(start_date, '%Y-%m-%d')-timedelta(days=1)))

@@ -1,20 +1,10 @@
 import rootFunctions
-
 import gspread
 import pandas as pd
 import csv
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
-import matplotlib.pyplot as mp
-import matplotlib as mpl
-import numpy as np
-from scipy.stats import linregress
-from matplotlib.widgets import Button
-import termtables as tt
-from scipy.stats import linregress
-from scipy import stats
-import math
-import hypothesisTesting
+
 
 
 
@@ -30,7 +20,7 @@ def main():
     end_date = start_date + timedelta(days=30)
     df_restraints['start_datetime'] = pd.to_datetime(df_restraints['start_datetime']).dt.tz_localize(None)
     truncated_df = df_restraints[(df_restraints["start_datetime"] >= start_date) & (df_restraints["start_datetime"] <= end_date)]
-    columns = ['Asin', 'Deal Type', 'Uplift', 'Incremental Profit/Loss During Deal', 'Profit/Loss From Deal', 'Deal Discount Costs','Profit Before Deal (30 Days)', 'Profit During Deal', 'Profit After Deal (30 Days)','Units Before Deal (30 Days)', 'Units During Deal', 'Units After Deal (30 Days)', 'Price Of Unit Before Deal','Price Of Unit During Deal','Price Of Unit After Deal']
+    columns = ['Asin', 'Deal Type', 'Uplift', 'Was there Incremental Profit During Deal', 'Incremental Profit/Loss During Deal', 'Deal Discount Costs','Profit Before Deal (30 Days)', 'Profit During Deal', 'Profit After Deal (30 Days)','Units Before Deal (30 Days)', 'Units During Deal', 'Units After Deal (30 Days)', 'Price Of Unit Before Deal','Price Of Unit During Deal','Price Of Unit After Deal']
     dealInfo = pd.DataFrame(columns=columns)
     sheet_name = 'Trellis Data April'
     sheet = gc.open(sheet_name)

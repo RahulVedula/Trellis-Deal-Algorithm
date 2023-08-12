@@ -5,6 +5,8 @@ import csv
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 
+#This code will output all the child asins on deals for a specified month (yyyy-mm-01), and store that data into a google sheets:
+#https://docs.google.com/spreadsheets/d/1_DLVbe2q3p9jWB3GZwEegycXeFhyBChjrq-4TgNhL-o/edit?usp=sharing (data for April) 
 
 
 
